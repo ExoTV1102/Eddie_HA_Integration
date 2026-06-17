@@ -137,8 +137,10 @@ def _walk_payload(
 
     if isinstance(value, dict):
         obis = _first_string(value, "obis", "obisCode", "dataTag", "data_tag", "tag")
-        quantity = _first_number(value, "value", "quantity", "energy_Quantity.quantity", "amount")
-        if obis and quantity is not None:
+        quantity = _first_number(value, "rawValue", "raw_value")
+        unit = _first_string(value, "rawUnitOfMeasurement", "raw_unit_of_measurement", "rawUnit")
+        if quantity is None:
+            quantity = _first_number(value, "value", "quantity", "energy_Quantity.quantity", "amount")
             unit = _first_string(
                 value,
                 "unit",
@@ -147,6 +149,7 @@ def _walk_payload(
                 "measurementUnit",
                 "unitOfMeasurement",
             )
+        if obis and quantity is not None:
             readings[obis] = _make_reading(obis, quantity, unit, timestamp)
 
         _extract_tasmota_values(value, readings, timestamp)
