@@ -38,4 +38,4 @@ OBIS values are:
 
 - `1-0:1.8.0`: imported energy, default unit `kWh`
 - `1-0:2.8.0`: exported energy, default unit `kWh`
-- `1-0:16.7.0`: active power, default unit `W`
+- `1-0:16.7.0`: active power, normalized to `W`

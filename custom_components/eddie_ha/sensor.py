@@ -150,6 +150,15 @@ class EddieReadingSensor(EddieBaseSensor):
         return None
 
     @property
+    def suggested_display_precision(self) -> int | None:
+        """Return a sensible display precision for normalized readings."""
+        if self.reading is None:
+            return None
+        if self.reading.device_class == "power":
+            return 2
+        return None
+
+    @property
     def extra_state_attributes(self) -> dict[str, str | None]:
         """Return reading attributes."""
         reading = self.reading

@@ -33,6 +33,8 @@ _TASMOTA_TO_OBIS = {
     "E_out": ("1-0:2.8.0", "kWh"),
     "Power": ("1-0:16.7.0", "W"),
 }
+_ENERGY_OBIS = {"1-0:1.8.0", "1-0:2.8.0"}
+_POWER_OBIS = {"1-0:1.7.0", "1-0:2.7.0", "1-0:16.7.0"}
 
 
 @dataclass(frozen=True)
@@ -236,22 +238,47 @@ def _make_reading(key: str, value: float | str, unit: str | None, timestamp: dat
     device_class = None
     state_class = None
     normalized_unit = unit
+    normalized_value = value
 
-    if key in {"1-0:1.8.0", "1-0:2.8.0"}:
+    if key in _ENERGY_OBIS:
         device_class = "energy"
         state_class = "total_increasing"
-        normalized_unit = unit or "kWh"
-    elif key in {"1-0:1.7.0", "1-0:2.7.0", "1-0:16.7.0"}:
+        normalized_value = _normalize_energy_value(value, unit)
+        normalized_unit = "kWh"
+    elif key in _POWER_OBIS:
         device_class = "power"
         state_class = "measurement"
-        normalized_unit = unit or "W"
+        normalized_value = _normalize_power_value(value, unit)
+        normalized_unit = "W"
 
     return EddieReading(
         key=key,
         name=f"EDDIE {key}",
-        value=value,
+        value=normalized_value,
         unit=normalized_unit,
         device_class=device_class,
         state_class=state_class,
         last_updated=timestamp,
     )
+
+
+def _normalize_energy_value(value: float | str, unit: str | None) -> float | str:
+    if not isinstance(value, (int, float)):
+        return value
+    if unit in {"Wh", "WATT_HOUR"}:
+        return _clean_zero(value / 1000)
+    return _clean_zero(float(value))
+
+
+def _normalize_power_value(value: float | str, unit: str | None) -> float | str:
+    if not isinstance(value, (int, float)):
+        return value
+    if unit in {"kW", "KW", "KILO_WATT"}:
+        return _clean_zero(value * 1000)
+    return _clean_zero(float(value))
+
+
+def _clean_zero(value: float) -> float:
+    if value == 0:
+        return 0.0
+    return value
