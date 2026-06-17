@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, UTC
+import json
 import logging
 import re
 from typing import Any
@@ -19,6 +20,19 @@ from .const import DOMAIN, SIGNAL_READING_DISCOVERED
 _LOGGER = logging.getLogger(__name__)
 
 _OBIS_RE = re.compile(r"^\d+-\d+:\d+\.\d+\.\d+(?:\*\d+)?$")
+_AIIDA_QUANTITY_TYPE_TO_OBIS = {
+    "0": "1-0:1.8.0",
+    "2": "1-0:2.8.0",
+    "TOTALACTIVEENERGYCONSUMED_IMPORT_KWH": "1-0:1.8.0",
+    "TOTALACTIVEENERGYPRODUCED_EXPORT_KWH": "1-0:2.8.0",
+    "INSTANTANEOUSACTIVEPOWERCONSUMPTION_IMPORT__KW": "1-0:1.7.0",
+    "INSTANTANEOUSACTIVEPOWERGENERATION_EXPORT_KW": "1-0:2.7.0",
+}
+_TASMOTA_TO_OBIS = {
+    "E_in": ("1-0:1.8.0", "kWh"),
+    "E_out": ("1-0:2.8.0", "kWh"),
+    "Power": ("1-0:16.7.0", "W"),
+}
 
 
 @dataclass(frozen=True)
@@ -105,7 +119,7 @@ class EddieHaCoordinator:
 
 def extract_readings(message: dict[str, Any], timestamp: datetime) -> list[EddieReading]:
     """Extract useful sensor readings from a generic EDDIE payload."""
-    payload = message.get("payload", message)
+    payload = _decode_payload(message.get("payload", message))
     readings: dict[str, EddieReading] = {}
     _walk_payload(payload, [], readings, timestamp)
     return list(readings.values())
@@ -117,12 +131,24 @@ def _walk_payload(
     readings: dict[str, EddieReading],
     timestamp: datetime,
 ) -> None:
+    value = _decode_payload(value)
+
     if isinstance(value, dict):
         obis = _first_string(value, "obis", "obisCode", "dataTag", "data_tag", "tag")
         quantity = _first_number(value, "value", "quantity", "energy_Quantity.quantity", "amount")
         if obis and quantity is not None:
-            unit = _first_string(value, "unit", "unitOfMeasure", "unit_of_measure", "measurementUnit")
+            unit = _first_string(
+                value,
+                "unit",
+                "unitOfMeasure",
+                "unit_of_measure",
+                "measurementUnit",
+                "unitOfMeasurement",
+            )
             readings[obis] = _make_reading(obis, quantity, unit, timestamp)
+
+        _extract_tasmota_values(value, readings, timestamp)
+        _extract_cim_values(value, readings, timestamp)
 
         for key, child in value.items():
             _walk_payload(child, [*path, str(key)], readings, timestamp)
@@ -137,6 +163,52 @@ def _walk_payload(
         key = path[-1]
         if _OBIS_RE.match(key):
             readings[key] = _make_reading(key, value, None, timestamp)
+
+
+def _decode_payload(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text or text[0] not in "[{":
+        return value
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return value
+
+
+def _extract_tasmota_values(
+    data: dict[str, Any],
+    readings: dict[str, EddieReading],
+    timestamp: datetime,
+) -> None:
+    for raw_key, (obis, unit) in _TASMOTA_TO_OBIS.items():
+        value = data.get(raw_key)
+        if isinstance(value, (int, float)):
+            readings[obis] = _make_reading(obis, float(value), unit, timestamp)
+
+
+def _extract_cim_values(
+    data: dict[str, Any],
+    readings: dict[str, EddieReading],
+    timestamp: datetime,
+) -> None:
+    quantities = data.get("Quantity", data.get("quantities"))
+    if not isinstance(quantities, list):
+        return
+
+    for item in quantities:
+        if not isinstance(item, dict):
+            continue
+
+        type_value = item.get("type")
+        if type_value is None:
+            continue
+
+        obis = _AIIDA_QUANTITY_TYPE_TO_OBIS.get(str(type_value))
+        quantity = _first_number(item, "quantity", "value", "amount")
+        if obis and quantity is not None:
+            readings[obis] = _make_reading(obis, quantity, None, timestamp)
 
 
 def _first_string(data: dict[str, Any], *keys: str) -> str | None:
@@ -169,7 +241,7 @@ def _make_reading(key: str, value: float | str, unit: str | None, timestamp: dat
         device_class = "energy"
         state_class = "total_increasing"
         normalized_unit = unit or "kWh"
-    elif key == "1-0:16.7.0":
+    elif key in {"1-0:1.7.0", "1-0:2.7.0", "1-0:16.7.0"}:
         device_class = "power"
         state_class = "measurement"
         normalized_unit = unit or "W"

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy, UnitOfPower
@@ -74,12 +77,20 @@ class EddieStatusSensor(EddieBaseSensor):
         return "connected" if self.coordinator.connected else "waiting_for_data"
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | None]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return diagnostic attributes."""
         last_message_at = self.coordinator.last_message_at
+        message = self.coordinator.last_message or {}
+        payload = message.get("payload")
+
         return {
             "last_message_at": last_message_at.isoformat() if last_message_at else None,
-            "readings": str(len(self.coordinator.readings)),
+            "last_message_type": message.get("type"),
+            "last_data_need_id": message.get("dataNeedId"),
+            "last_connection_id": message.get("connectionId"),
+            "readings": len(self.coordinator.readings),
+            "reading_keys": sorted(self.coordinator.readings),
+            "last_payload_preview": _payload_preview(payload),
         }
 
 
@@ -146,3 +157,11 @@ class EddieReadingSensor(EddieBaseSensor):
             "obis": self.key,
             "last_updated": reading.last_updated.isoformat() if reading else None,
         }
+
+
+def _payload_preview(payload: Any) -> str | None:
+    if payload is None:
+        return None
+    if isinstance(payload, str):
+        return payload[:1000]
+    return json.dumps(payload, ensure_ascii=False, default=str)[:1000]
