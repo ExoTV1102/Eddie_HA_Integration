@@ -1,0 +1,12 @@
+{
+  "domain": "eddie_ha",
+  "name": "EDDIE Home Assistant",
+  "codeowners": ["@ExoTV1102"],
+  "config_flow": true,
+  "documentation": "https://github.com/ExoTV1102/Eddie_HA/tree/main/home-assistant",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/ExoTV1102/Eddie_HA/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

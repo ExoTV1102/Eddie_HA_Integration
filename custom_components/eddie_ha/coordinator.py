@@ -1,0 +1,185 @@
+"""Runtime coordinator for EDDIE Home Assistant push data."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, UTC
+import logging
+import re
+from typing import Any
+
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+
+from .api import EddieHaClient
+from .const import DOMAIN, SIGNAL_READING_DISCOVERED
+
+_LOGGER = logging.getLogger(__name__)
+
+_OBIS_RE = re.compile(r"^\d+-\d+:\d+\.\d+\.\d+(?:\*\d+)?$")
+
+
+@dataclass(frozen=True)
+class EddieReading:
+    """A single reading exposed to Home Assistant as a sensor."""
+
+    key: str
+    name: str
+    value: float | str
+    unit: str | None
+    device_class: str | None
+    state_class: str | None
+    last_updated: datetime
+
+
+class EddieHaCoordinator:
+    """Coordinate the EDDIE WebSocket and discovered readings."""
+
+    def __init__(self, hass: HomeAssistant, client: EddieHaClient, entry_id: str) -> None:
+        self.hass = hass
+        self.client = client
+        self.entry_id = entry_id
+        self.readings: dict[str, EddieReading] = {}
+        self.last_message: dict[str, Any] | None = None
+        self.last_message_at: datetime | None = None
+        self.connected = False
+        self._listeners: list[Callable[[], None]] = []
+        self._stop_event = asyncio.Event()
+        self._task: asyncio.Task[None] | None = None
+
+    @callback
+    def async_add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Register a listener for coordinator updates."""
+        self._listeners.append(listener)
+
+        @callback
+        def remove_listener() -> None:
+            if listener in self._listeners:
+                self._listeners.remove(listener)
+
+        return remove_listener
+
+    @callback
+    def async_update_listeners(self) -> None:
+        """Notify listeners."""
+        for listener in list(self._listeners):
+            listener()
+
+    async def async_start(self) -> None:
+        """Start the EDDIE listener."""
+        if self._task is None:
+            self._task = self.hass.async_create_task(self._run())
+
+    async def async_stop(self) -> None:
+        """Stop the EDDIE listener."""
+        self._stop_event.set()
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+
+    async def _run(self) -> None:
+        await self.client.listen(self._handle_message, self._stop_event)
+
+    async def _handle_message(self, message: dict[str, Any]) -> None:
+        self.last_message = message
+        self.last_message_at = datetime.now(UTC)
+        self.connected = True
+
+        discovered = False
+        for reading in extract_readings(message, self.last_message_at):
+            is_new = reading.key not in self.readings
+            self.readings[reading.key] = reading
+            if is_new:
+                discovered = True
+
+        self.async_update_listeners()
+        if discovered:
+            async_dispatcher_send(self.hass, f"{SIGNAL_READING_DISCOVERED}_{self.entry_id}")
+
+
+def extract_readings(message: dict[str, Any], timestamp: datetime) -> list[EddieReading]:
+    """Extract useful sensor readings from a generic EDDIE payload."""
+    payload = message.get("payload", message)
+    readings: dict[str, EddieReading] = {}
+    _walk_payload(payload, [], readings, timestamp)
+    return list(readings.values())
+
+
+def _walk_payload(
+    value: Any,
+    path: list[str],
+    readings: dict[str, EddieReading],
+    timestamp: datetime,
+) -> None:
+    if isinstance(value, dict):
+        obis = _first_string(value, "obis", "obisCode", "dataTag", "data_tag", "tag")
+        quantity = _first_number(value, "value", "quantity", "energy_Quantity.quantity", "amount")
+        if obis and quantity is not None:
+            unit = _first_string(value, "unit", "unitOfMeasure", "unit_of_measure", "measurementUnit")
+            readings[obis] = _make_reading(obis, quantity, unit, timestamp)
+
+        for key, child in value.items():
+            _walk_payload(child, [*path, str(key)], readings, timestamp)
+        return
+
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            _walk_payload(child, [*path, str(index)], readings, timestamp)
+        return
+
+    if isinstance(value, (int, float)) and path:
+        key = path[-1]
+        if _OBIS_RE.match(key):
+            readings[key] = _make_reading(key, value, None, timestamp)
+
+
+def _first_string(data: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _first_number(data: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                continue
+    return None
+
+
+def _make_reading(key: str, value: float | str, unit: str | None, timestamp: datetime) -> EddieReading:
+    device_class = None
+    state_class = None
+    normalized_unit = unit
+
+    if key in {"1-0:1.8.0", "1-0:2.8.0"}:
+        device_class = "energy"
+        state_class = "total_increasing"
+        normalized_unit = unit or "kWh"
+    elif key == "1-0:16.7.0":
+        device_class = "power"
+        state_class = "measurement"
+        normalized_unit = unit or "W"
+
+    return EddieReading(
+        key=key,
+        name=f"EDDIE {key}",
+        value=value,
+        unit=normalized_unit,
+        device_class=device_class,
+        state_class=state_class,
+        last_updated=timestamp,
+    )

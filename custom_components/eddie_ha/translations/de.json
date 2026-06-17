@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EDDIE mit Home Assistant koppeln",
+        "description": "Erzeuge zuerst in der EDDIE/Home-Assistant-UI einen Home-Assistant-Kopplungscode und gib ihn dann hier ein.",
+        "data": {
+          "url": "EDDIE Home Assistant URL",
+          "pairing_code": "Kopplungscode",
+          "display_name": "Anzeigename"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Home Assistant konnte EDDIE nicht erreichen.",
+      "invalid_pairing": "EDDIE hat den Kopplungscode abgelehnt. Prüfe den Code oder erzeuge einen neuen Code in der EDDIE/Home-Assistant-UI."
+    },
+    "abort": {
+      "already_configured": "Diese EDDIE/Home-Assistant-Kopplung ist bereits eingerichtet."
+    }
+  }
+}

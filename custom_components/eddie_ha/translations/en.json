@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pair EDDIE with Home Assistant",
+        "description": "Generate a Home Assistant pairing code in the EDDIE Home Assistant UI first, then enter it here.",
+        "data": {
+          "url": "EDDIE Home Assistant URL",
+          "pairing_code": "Pairing code",
+          "display_name": "Display name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to EDDIE.",
+      "invalid_pairing": "EDDIE rejected the pairing code. Check the code or generate a new one in the EDDIE Home Assistant UI."
+    },
+    "abort": {
+      "already_configured": "This EDDIE Home Assistant pairing is already configured."
+    }
+  }
+}
