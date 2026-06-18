@@ -80,6 +80,7 @@ class EddieHaClient:
         self,
         message_handler: Callable[[dict[str, Any]], Awaitable[None]],
         stop_event: asyncio.Event,
+        connection_handler: Callable[[bool], Awaitable[None]] | None = None,
     ) -> None:
         """Listen for EDDIE push messages until stopped."""
         if self.token is None:
@@ -95,6 +96,8 @@ class EddieHaClient:
                     timeout=30,
                 ) as websocket:
                     _LOGGER.info("Connected to EDDIE Home Assistant WebSocket")
+                    if connection_handler is not None:
+                        await connection_handler(True)
                     async for message in websocket:
                         if stop_event.is_set():
                             return
@@ -102,13 +105,16 @@ class EddieHaClient:
                             await message_handler(json.loads(message.data))
                         elif message.type in {WSMsgType.CLOSED, WSMsgType.ERROR}:
                             break
+                    if connection_handler is not None:
+                        await connection_handler(False)
             except asyncio.CancelledError:
                 raise
             except (ClientResponseError, ClientError, TimeoutError, asyncio.TimeoutError, json.JSONDecodeError) as err:
+                if connection_handler is not None:
+                    await connection_handler(False)
                 _LOGGER.warning("EDDIE WebSocket connection failed: %s", err)
 
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=15)
             except asyncio.TimeoutError:
                 continue
-

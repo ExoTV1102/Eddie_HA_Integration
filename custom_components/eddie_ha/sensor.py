@@ -74,7 +74,7 @@ class EddieStatusSensor(EddieBaseSensor):
     @property
     def native_value(self) -> str:
         """Return the current connection status."""
-        return "connected" if self.coordinator.connected else "waiting_for_data"
+        return self.coordinator.connection_status
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

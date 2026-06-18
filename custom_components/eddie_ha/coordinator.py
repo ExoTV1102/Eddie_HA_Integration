@@ -61,6 +61,7 @@ class EddieHaCoordinator:
         self.last_message: dict[str, Any] | None = None
         self.last_message_at: datetime | None = None
         self.connected = False
+        self.connection_status = "waiting_for_data"
         self._listeners: list[Callable[[], None]] = []
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
@@ -100,12 +101,18 @@ class EddieHaCoordinator:
             self._task = None
 
     async def _run(self) -> None:
-        await self.client.listen(self._handle_message, self._stop_event)
+        await self.client.listen(self._handle_message, self._stop_event, self._handle_connection_state)
+
+    async def _handle_connection_state(self, connected: bool) -> None:
+        self.connected = connected
+        self.connection_status = "connected" if connected else "disconnected"
+        self.async_update_listeners()
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
         self.last_message = message
         self.last_message_at = datetime.now(UTC)
         self.connected = True
+        self.connection_status = "connected"
 
         discovered = False
         for reading in extract_readings(message, self.last_message_at):
