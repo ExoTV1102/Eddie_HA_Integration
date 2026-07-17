@@ -7,7 +7,15 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfPower
+from homeassistant.const import (
+    POWER_VOLT_AMPERE_REACTIVE,
+    UnitOfApparentPower,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfFrequency,
+    UnitOfPower,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -103,6 +111,19 @@ class EddieReadingSensor(EddieBaseSensor):
         self._attr_unique_id = f"{entry_id}_{key.replace(':', '_').replace('.', '_').replace('*', '_')}"
 
     @property
+    def device_info(self) -> dict[str, Any] | None:
+        """Group Hager readings by their Modbus source in the HA device registry."""
+        reading = self.reading
+        if reading is None or reading.device_id is None:
+            return None
+        return {
+            "identifiers": {(DOMAIN, f"{self.coordinator.entry_id}_{reading.device_id}")},
+            "name": reading.device_name,
+            "manufacturer": "Hager",
+            "model": "Flow",
+        }
+
+    @property
     def reading(self) -> EddieReading | None:
         """Return the current reading."""
         return self.coordinator.readings.get(self.key)
@@ -123,8 +144,20 @@ class EddieReadingSensor(EddieBaseSensor):
         unit = self.reading.unit if self.reading else None
         if unit == "kWh":
             return UnitOfEnergy.KILO_WATT_HOUR
+        if unit == "Wh":
+            return UnitOfEnergy.WATT_HOUR
         if unit == "W":
             return UnitOfPower.WATT
+        if unit == "A":
+            return UnitOfElectricCurrent.AMPERE
+        if unit == "V":
+            return UnitOfElectricPotential.VOLT
+        if unit == "VA":
+            return UnitOfApparentPower.VOLT_AMPERE
+        if unit == "var":
+            return POWER_VOLT_AMPERE_REACTIVE
+        if unit == "Hz":
+            return UnitOfFrequency.HERTZ
         return unit
 
     @property
@@ -136,6 +169,20 @@ class EddieReadingSensor(EddieBaseSensor):
             return SensorDeviceClass.ENERGY
         if self.reading.device_class == "power":
             return SensorDeviceClass.POWER
+        if self.reading.device_class == "current":
+            return SensorDeviceClass.CURRENT
+        if self.reading.device_class == "voltage":
+            return SensorDeviceClass.VOLTAGE
+        if self.reading.device_class == "battery":
+            return SensorDeviceClass.BATTERY
+        if self.reading.device_class == "reactive_power":
+            return SensorDeviceClass.REACTIVE_POWER
+        if self.reading.device_class == "apparent_power":
+            return SensorDeviceClass.APPARENT_POWER
+        if self.reading.device_class == "power_factor":
+            return SensorDeviceClass.POWER_FACTOR
+        if self.reading.device_class == "frequency":
+            return SensorDeviceClass.FREQUENCY
         return None
 
     @property
@@ -147,23 +194,18 @@ class EddieReadingSensor(EddieBaseSensor):
             return SensorStateClass.MEASUREMENT
         if self.reading.state_class == "total_increasing":
             return SensorStateClass.TOTAL_INCREASING
+        if self.reading.state_class == "total":
+            return SensorStateClass.TOTAL
         return None
 
     @property
-    def suggested_display_precision(self) -> int | None:
-        """Return a sensible display precision for normalized readings."""
-        if self.reading is None:
-            return None
-        if self.reading.device_class == "power":
-            return 2
-        return None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, str | None]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return reading attributes."""
         reading = self.reading
         return {
-            "obis": self.key,
+            "raw_tag": reading.raw_tag if reading else None,
+            "data_tag": reading.data_tag if reading else None,
+            "source_value": reading.source_value if reading else None,
             "last_updated": reading.last_updated.isoformat() if reading else None,
         }
 

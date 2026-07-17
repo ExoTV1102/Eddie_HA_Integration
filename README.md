@@ -4,7 +4,7 @@ Custom Home Assistant integration for connecting Home Assistant to the EDDIE Hom
 
 ## Installation via HACS
 
-1. Add `https://github.com/ExoTV1102/Eddie_HA` as a custom repository in HACS.
+1. Add `https://github.com/ExoTV1102/Eddie_HA_Integration` as a custom repository in HACS.
 2. Select repository type `Integration`.
 3. Install `EDDIE Home Assistant`.
 4. Restart Home Assistant.
@@ -32,10 +32,12 @@ Home Assistant configuration and restart Home Assistant.
 
 ## Supported Sensors
 
-The integration creates a diagnostic connection sensor immediately. OBIS sensors
-are discovered dynamically when EDDIE sends matching values. The first mapped
-OBIS values are:
+The integration creates a diagnostic connection sensor immediately. OBIS and
+Hager Flow sensors are discovered dynamically when EDDIE sends matching values.
+Hager readings are grouped into devices for the Flow system, EMS, wallbox,
+storage, and power meter.
 
-- `1-0:1.8.0`: imported energy, default unit `kWh`
-- `1-0:2.8.0`: exported energy, default unit `kWh`
-- `1-0:16.7.0`: active power, normalized to `W`
+Common OBIS values for imported/exported energy, active/reactive/apparent power,
+voltage, current, frequency, power factor, tariffs, and phase-specific readings
+are mapped to matching Home Assistant device and state classes. Unknown OBIS
+values remain available as generic sensors.
