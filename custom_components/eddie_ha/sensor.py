@@ -8,7 +8,6 @@ from typing import Any
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    POWER_VOLT_AMPERE_REACTIVE,
     UnitOfApparentPower,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
@@ -155,7 +154,7 @@ class EddieReadingSensor(EddieBaseSensor):
         if unit == "VA":
             return UnitOfApparentPower.VOLT_AMPERE
         if unit == "var":
-            return POWER_VOLT_AMPERE_REACTIVE
+            return "var"
         if unit == "Hz":
             return UnitOfFrequency.HERTZ
         return unit

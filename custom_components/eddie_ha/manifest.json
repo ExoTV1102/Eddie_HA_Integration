@@ -8,5 +8,5 @@
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/ExoTV1102/Eddie_HA_Integration/issues",
   "requirements": [],
-  "version": "0.3.0"
+  "version": "0.3.1"
 }
