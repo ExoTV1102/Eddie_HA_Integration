@@ -102,7 +102,10 @@ class EddieHaClient:
                         if stop_event.is_set():
                             return
                         if message.type == WSMsgType.TEXT:
-                            await message_handler(json.loads(message.data))
+                            try:
+                                await message_handler(json.loads(message.data))
+                            except Exception:
+                                _LOGGER.exception("Failed to process an EDDIE WebSocket message")
                         elif message.type in {WSMsgType.CLOSED, WSMsgType.ERROR}:
                             break
                     if connection_handler is not None:

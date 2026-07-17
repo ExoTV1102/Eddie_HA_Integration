@@ -176,7 +176,10 @@ class EddieHaCoordinator:
     def async_update_listeners(self) -> None:
         """Notify listeners."""
         for listener in list(self._listeners):
-            listener()
+            try:
+                listener()
+            except Exception:
+                _LOGGER.exception("Failed to update an EDDIE Home Assistant entity")
 
     async def async_start(self) -> None:
         """Start the EDDIE listener."""
@@ -398,26 +401,27 @@ def _make_hager_reading(
     device_class = None
     state_class = None
 
-    if unit in {"Wh", "kWh"}:
-        device_class = "energy"
-        state_class = (
-            "total_increasing"
-            if datapoint_id in _HAGER_TOTAL_INCREASING_ENERGY
-            else "total"
-        )
-    elif unit in {"W", "kW", "KW"}:
-        device_class = "power"
-        state_class = "measurement"
-    elif unit == "A":
-        device_class = "current"
-        state_class = "measurement"
-    elif unit == "V":
-        device_class = "voltage"
-        state_class = "measurement"
-    elif unit == "%":
-        if datapoint_id == "battery_state_of_charge":
-            device_class = "battery"
-        state_class = "measurement"
+    if isinstance(value, (int, float)):
+        if unit in {"Wh", "kWh"}:
+            device_class = "energy"
+            state_class = (
+                "total_increasing"
+                if datapoint_id in _HAGER_TOTAL_INCREASING_ENERGY
+                else "total"
+            )
+        elif unit in {"W", "kW", "KW"}:
+            device_class = "power"
+            state_class = "measurement"
+        elif unit == "A":
+            device_class = "current"
+            state_class = "measurement"
+        elif unit == "V":
+            device_class = "voltage"
+            state_class = "measurement"
+        elif unit == "%":
+            if datapoint_id == "battery_state_of_charge":
+                device_class = "battery"
+            state_class = "measurement"
 
     return EddieReading(
         key=raw_tag,
